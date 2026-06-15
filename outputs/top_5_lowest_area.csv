@@ -1,0 +1,233 @@
+country_name,region,subregion,area
+Vatican City,Europe,Southern Europe,0.44
+Monaco,Europe,Western Europe,2.02
+Gibraltar,Europe,Southern Europe,6.0
+Tokelau,Oceania,Polynesia,12.0
+Cocos (Keeling) Islands,Oceania,Australia and New Zealand,14.0
+-- ============================================================
+-- Countries ETL - Analysis Queries
+-- Run individually in Metabase: New → SQL Query
+-- ============================================================
+
+
+-- ── Q1 ───────────────────────────────────────────────────────
+-- "French Speaking Countries Count"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(DISTINCT country_name) AS french_speaking_countries
+FROM vw_country_languages
+WHERE language ILIKE 'French';
+
+
+-- ── Q2 ───────────────────────────────────────────────────────
+-- "English Speaking Countries Count"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(DISTINCT country_name) AS english_speaking_countries
+FROM vw_country_languages
+WHERE language ILIKE 'English';
+
+
+-- ── Q3 ───────────────────────────────────────────────────────
+-- "Countries With More Than One Language"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS multilingual_countries
+FROM countries
+WHERE language_count > 1;
+
+
+-- ── Q4 ───────────────────────────────────────────────────────
+-- "Countries Using Euro"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS euro_countries
+FROM countries
+WHERE currency_code = 'EUR';
+
+
+-- ── Q5 ───────────────────────────────────────────────────────
+-- "Countries in Western Europe"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS western_europe_countries
+FROM countries
+WHERE subregion ILIKE 'Western Europe';
+
+
+-- ── Q6 ───────────────────────────────────────────────────────
+-- "Countries Not Yet Independent"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS not_independent
+FROM countries
+WHERE independence IS FALSE;
+
+
+-- ── Q7a ──────────────────────────────────────────────────────
+-- "Distinct Continents Count"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(DISTINCT continent) AS distinct_continents
+FROM vw_country_continents;
+
+
+-- ── Q7b ──────────────────────────────────────────────────────
+-- "Country Count Per Continent"
+-- Visual: Bar chart
+-- X axis → continent
+-- Y axis → country_count
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    continent,
+    COUNT(DISTINCT country_name) AS country_count
+FROM vw_country_continents
+GROUP BY continent
+ORDER BY country_count DESC;
+
+
+-- ── Q8 ───────────────────────────────────────────────────────
+-- "Countries That Don't Start Week on Monday"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS non_monday_start
+FROM countries
+WHERE start_of_week IS NOT NULL
+AND LOWER(start_of_week) <> 'monday';
+
+
+-- ── Q8b ──────────────────────────────────────────────────────
+-- "Week Start Day Distribution"
+-- Visual: Pie chart
+-- Dimension → week_start_group
+-- Measure → country_count
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    CASE
+        WHEN LOWER(start_of_week) = 'monday' THEN 'Monday'
+        ELSE 'Non-Monday'
+    END AS week_start_group,
+    COUNT(*) AS country_count
+FROM countries
+WHERE start_of_week IS NOT NULL
+GROUP BY week_start_group;
+
+
+-- ── Q9 ───────────────────────────────────────────────────────
+-- "Countries Not in United Nations"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS non_un_members
+FROM countries
+WHERE un_member IS FALSE;
+
+
+-- ── Q10 ──────────────────────────────────────────────────────
+-- "Countries in United Nations"
+-- Visual: Single number
+-- ─────────────────────────────────────────────────────────────
+SELECT COUNT(*) AS un_members
+FROM countries
+WHERE un_member IS TRUE;
+
+
+-- ── Q10b ─────────────────────────────────────────────────────
+-- "UN Membership Breakdown"
+-- Visual: Pie chart
+-- Dimension → un_status
+-- Measure → country_count
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    CASE
+        WHEN un_member IS TRUE THEN 'UN Member'
+        WHEN un_member IS FALSE THEN 'Not UN Member'
+        ELSE 'Unknown'
+    END AS un_status,
+    COUNT(*) AS country_count
+FROM countries
+GROUP BY un_status
+ORDER BY country_count DESC;
+
+
+-- ── Q11 ──────────────────────────────────────────────────────
+-- "2 Least Populated Countries Per Continent"
+-- Visual: Table
+-- Columns → continent, country_name, population
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    continent,
+    country_name,
+    population
+FROM (
+    SELECT
+        continent,
+        country_name,
+        population,
+        ROW_NUMBER() OVER (
+            PARTITION BY continent
+            ORDER BY population ASC
+        ) AS rn
+    FROM vw_country_continents
+    WHERE population IS NOT NULL
+      AND population >= 0
+) ranked
+WHERE rn <= 2
+ORDER BY continent, population ASC;
+
+
+-- ── Q12 ──────────────────────────────────────────────────────
+-- "2 Largest Countries By Area Per Continent"
+-- Visual: Table or bar chart
+-- Columns → continent, country_name, area
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    continent,
+    country_name,
+    area
+FROM (
+    SELECT
+        continent,
+        country_name,
+        area,
+        ROW_NUMBER() OVER (
+            PARTITION BY continent
+            ORDER BY area DESC
+        ) AS rn
+    FROM vw_country_continents
+    WHERE area IS NOT NULL
+      AND area > 0
+) ranked
+WHERE rn <= 2
+ORDER BY continent, area DESC;
+
+
+-- ── Q13 ──────────────────────────────────────────────────────
+-- "Top 5 Countries Largest Area"
+-- Visual: Horizontal bar chart
+-- X axis → area
+-- Y axis → country_name
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    country_name,
+    area
+FROM countries
+WHERE area IS NOT NULL
+  AND area > 0
+ORDER BY area DESC
+LIMIT 5;
+
+
+-- ── Q14 ──────────────────────────────────────────────────────
+-- "Top 5 Countries Smallest Area"
+-- Visual: Horizontal bar chart
+-- X axis → area
+-- Y axis → country_name
+-- ─────────────────────────────────────────────────────────────
+SELECT
+    country_name,
+    area
+FROM countries
+WHERE area IS NOT NULL
+  AND area > 0
+ORDER BY area ASC
+LIMIT 5;
